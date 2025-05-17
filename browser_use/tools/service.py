@@ -9,6 +9,7 @@ try:
 	from lmnr import Laminar  # type: ignore
 except ImportError:
 	Laminar = None  # type: ignore
+from cdp_use.cdp.network import types
 from pydantic import BaseModel
 
 from browser_use.agent.views import ActionModel, ActionResult
@@ -40,6 +41,7 @@ from browser_use.tools.views import (
 	GetDropdownOptionsAction,
 	GoToUrlAction,
 	InputTextAction,
+	AddCookiesAction,
 	NoParamsAction,
 	ScrollAction,
 	SearchGoogleAction,
@@ -487,6 +489,64 @@ class Tools(Generic[Context]):
 			except Exception as e:
 				logger.error(f'Failed to upload file: {e}')
 				raise BrowserError(f'Failed to upload file: {e}')
+
+		# Collect cookies
+		@self.registry.action(
+			'Collect cookies from the current page',
+		)
+		async def collect_cookies(browser_session: BrowserSession):
+			cdp_session = await browser_session.get_or_create_cdp_session(target_id=None, new_socket=False)
+			result = await cdp_session.cdp_client.send.Storage.getCookies(session_id=cdp_session.session_id)
+			cookies = result.get('cookies', [])
+			msg = f'🍪  Collected cookies from page {cdp_session.url}'
+			logger.info(msg)
+			return ActionResult(extracted_content=json.dumps(cookies), include_in_memory=True)
+
+		# Clear Cookies
+		@self.registry.action(
+			'Clear cookies from the current page',
+		)
+		async def clear_cookies(browser_session: BrowserSession):
+			cdp_session = await browser_session.get_or_create_cdp_session()
+			await cdp_session.cdp_client.send.Storage.clearCookies(session_id=cdp_session.session_id)
+			msg = f'🍪  Clear cookies for page {cdp_session.url}'
+			logger.info(msg)
+			return ActionResult(extracted_content=msg, include_in_memory=True)
+
+		# Add cookies
+		@self.registry.action(
+			'Add cookies for the current page',
+			param_model=AddCookiesAction,
+		)
+		async def add_cookies(params: AddCookiesAction, browser_session: BrowserSession):
+			cdp_session = await browser_session.get_or_create_cdp_session(target_id=None, new_socket=False)
+			cookies = []
+
+			def _add_if_not_none(cookie_dict, key, value):
+				if value is not None:
+					cookie_dict[key] = value
+
+			for cookie in params.cookies:
+				if not cookie.name or not cookie.value:
+					logger.warning(f'Skipping invalid cookie: {cookie}')
+					continue
+
+				cookie_param = types.CookieParam(name=cookie.name, value=cookie.value)
+				_add_if_not_none(cookie_param, 'domain', cookie.domain)
+				_add_if_not_none(cookie_param, 'path', cookie.path)
+				_add_if_not_none(cookie_param, 'expires', cookie.expires)
+				_add_if_not_none(cookie_param, 'httpOnly', cookie.httpOnly)
+				_add_if_not_none(cookie_param, 'secure', cookie.secure)
+				_add_if_not_none(cookie_param, 'sameSite', cookie.sameSite)
+				cookies.append(cookie_param)
+			
+			await cdp_session.cdp_client.send.Storage.setCookies(
+				params={'cookies': cookies},  # type: ignore[arg-type]
+				session_id=cdp_session.session_id,
+			)
+			msg = f'🍪  Added cookies for page {cdp_session.url}: {params.cookies}'
+			logger.info(msg)
+			return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		# Tab Management Actions
 
