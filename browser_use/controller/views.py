@@ -28,6 +28,27 @@ class InputTextAction(BaseModel):
 	clear_existing: bool = Field(default=True, description='set True to clear existing text, False to append to existing text')
 
 
+class ClearCookiesAction(BaseModel):
+	name: str | None = None
+	domain: str | None = None
+	path: str | None = None
+
+
+class Cookie(BaseModel):
+	name: str
+	value: str
+	domain: str | None = None
+	path: str | None = None
+	expires: int | None = None
+	httpOnly: bool | None = None
+	secure: bool | None = None
+	sameSite: str | None = None
+
+
+class AddCookiesAction(BaseModel):
+	cookies: list[Cookie]
+
+
 class DoneAction(BaseModel):
 	text: str
 	success: bool
