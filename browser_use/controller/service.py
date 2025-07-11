@@ -24,6 +24,8 @@ from browser_use.controller.views import (
 	DoneAction,
 	GoToUrlAction,
 	InputTextAction,
+	ClearCookiesAction,
+	AddCookiesAction,
 	NoParamsAction,
 	ScrollAction,
 	SearchGoogleAction,
@@ -270,6 +272,63 @@ class Controller(Generic[Context]):
 				msg = f'Failed to upload file to index {params.index}: {str(e)}'
 				logger.info(msg)
 				raise BrowserError(msg)
+				
+		# Collect cookies
+		@self.registry.action(
+			'Collect cookies from the current page',
+		)
+		async def collect_cookies(browser_session: BrowserSession):
+			page = await browser_session.get_current_page()
+			cookies = await page.context.cookies()
+			msg = f'🍪  Collected cookies from page {page.url}'
+			logger.info(msg)
+			return ActionResult(extracted_content=json.dumps(cookies), include_in_memory=True)
+
+		# Clear Cookies
+		@self.registry.action(
+			'Clear cookies from the current page',
+			param_model=ClearCookiesAction,
+		)
+		async def clear_cookies(params: ClearCookiesAction, browser_session: BrowserSession):
+			page = await browser_session.get_current_page()
+			await page.context.clear_cookies(name=params.name, domain=params.domain, path=params.path)
+			msg = f'🍪  Clear cookies for page {page.url}: name={params.name}, domain={params.domain}, path={params.path}'
+			logger.info(msg)
+			return ActionResult(extracted_content=msg, include_in_memory=True)
+
+		# Add cookies
+		@self.registry.action(
+			'Add cookies for the current page',
+			param_model=AddCookiesAction,
+		)
+		async def add_cookies(params: AddCookiesAction, browser_session: BrowserSession):
+			page = await browser_session.get_current_page()
+			cookies = []
+
+			def _add_if_not_none(cookie_dict, key, value):
+				if value is not None:
+					cookie_dict[key] = value
+
+			for cookie in params.cookies:
+				if not cookie.name or not cookie.value:
+					logger.warning(f'Skipping invalid cookie: {cookie}')
+					continue
+
+				cookie_dict = {
+					'name': cookie.name,
+					'value': cookie.value}
+				_add_if_not_none(cookie_dict, 'domain', cookie.domain)
+				_add_if_not_none(cookie_dict, 'path', cookie.path)
+				_add_if_not_none(cookie_dict, 'expires', cookie.expires)
+				_add_if_not_none(cookie_dict, 'httpOnly', cookie.httpOnly)
+				_add_if_not_none(cookie_dict, 'secure', cookie.secure)
+				_add_if_not_none(cookie_dict, 'sameSite', cookie.sameSite)
+				cookies.append(cookie_dict)
+			
+			await page.context.add_cookies(cookies=cookies)
+			msg = f'🍪  Added cookies for page {page.url}: {params.cookies}'
+			logger.info(msg)
+			return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		# Tab Management Actions
 
