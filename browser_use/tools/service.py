@@ -545,7 +545,7 @@ class Tools(Generic[Context]):
 			cdp_session = await browser_session.get_or_create_cdp_session(target_id=None, new_socket=False)
 			result = await cdp_session.cdp_client.send.Storage.getCookies(session_id=cdp_session.session_id)
 			cookies = result.get('cookies', [])
-			msg = f'🍪  Collected cookies from page {cdp_session.url}'
+			msg = f'🍪  Collected cookies from page {cdp_session.url}: {cookies}'
 			logger.info(msg)
 			return ActionResult(extracted_content=json.dumps(cookies), include_in_memory=True)
 
